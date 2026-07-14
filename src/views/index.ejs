@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finanzas de pareja</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Casa compartida</p>
+      <h1>Finanzas de pareja</h1>
+    </div>
+    <div class="topbar__total">
+      <span>Total a pagar</span>
+      <strong><%= money(dashboard.totals.all) %></strong>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="summary-grid" aria-label="Resumen">
+      <article class="metric">
+        <span>Pendiente</span>
+        <strong><%= money(dashboard.totals.pending) %></strong>
+      </article>
+      <article class="metric">
+        <span>Pagado</span>
+        <strong><%= money(dashboard.totals.paid) %></strong>
+      </article>
+      <article class="metric">
+        <span>Gastos compartidos</span>
+        <strong><%= money(dashboard.totals.shared) %></strong>
+      </article>
+      <article class="metric">
+        <span>Gastos individuales</span>
+        <strong><%= money(dashboard.totals.individual) %></strong>
+      </article>
+      <article class="metric metric--settlement">
+        <span>Compensacion</span>
+        <% if (dashboard.settlement) { %>
+          <strong><%= money(dashboard.settlement.amount) %></strong>
+          <small><%= dashboard.settlement.from %> paga a <%= dashboard.settlement.to %></small>
+        <% } else { %>
+          <strong><%= money(0) %></strong>
+          <small>Los gastos compartidos estan equilibrados</small>
+        <% } %>
+      </article>
+    </section>
+
+    <section class="balance-grid" aria-label="Balance por persona">
+      <% dashboard.balances.forEach((user) => { %>
+        <article class="person-card">
+          <div class="person-card__header">
+            <div>
+              <h2><%= user.name %></h2>
+              <span><%= percent(user.share) %> de los gastos compartidos</span>
+            </div>
+            <div class="balance-badge <%= user.balance >= 0 ? 'balance-badge--positive' : 'balance-badge--negative' %>">
+              <span><%= user.balance >= 0 ? 'A favor' : 'Debe compensar' %></span>
+              <strong><%= money(Math.abs(user.balance)) %></strong>
+            </div>
+          </div>
+
+          <div class="person-card__income">
+            <span>Ingreso mensual</span>
+            <strong><%= money(user.income) %></strong>
+          </div>
+
+          <a class="detail-link" href="/personas/<%= user.id %>">Ver detalle</a>
+
+          <div class="person-ledger">
+            <section class="ledger-group ledger-group--paid">
+              <h3>Compartidos</h3>
+              <dl>
+                <div>
+                  <dt>Le corresponde</dt>
+                  <dd><%= money(user.sharedOwed) %></dd>
+                </div>
+                <div>
+                  <dt>Asignado a pagar</dt>
+                  <dd><%= money(user.sharedAssigned) %></dd>
+                </div>
+                <div>
+                  <dt>Ya pagado</dt>
+                  <dd><%= money(user.sharedPaid) %></dd>
+                </div>
+                <div>
+                  <dt>Falta pagar como responsable</dt>
+                  <dd><%= money(user.sharedPendingToPay) %></dd>
+                </div>
+              </dl>
+            </section>
+
+            <section class="ledger-group ledger-group--pending">
+              <h3>Pendiente</h3>
+              <dl>
+                <div>
+                  <dt>Pendiente a cargo</dt>
+                  <dd><%= money(user.sharedPendingToPay) %></dd>
+                </div>
+                <div>
+                  <dt><%= user.pendingBalance >= 0 ? 'A recuperar si paga' : 'Debe aportar si el otro paga' %></dt>
+                  <dd><%= money(Math.abs(user.pendingBalance)) %></dd>
+                </div>
+                <div>
+                  <dt>Individual pendiente</dt>
+                  <dd><%= money(user.individualPending) %></dd>
+                </div>
+                <div>
+                  <dt>Total que debe pagar</dt>
+                  <dd><%= money(user.sharedPendingToPay + user.individualPending) %></dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+        </article>
+      <% }) %>
+    </section>
+
+    <section class="settings-panel">
+      <button class="settings-toggle" type="button" data-settings-toggle aria-expanded="false">
+        <span>Personas e ingresos</span>
+        <strong>Editar</strong>
+      </button>
+
+      <form class="panel settings-form is-hidden" action="/users" method="post" data-settings-panel>
+        <% users.forEach((user) => { %>
+          <div class="form-grid">
+            <div class="form-row">
+              <label for="name_<%= user.id %>">Nombre</label>
+              <input id="name_<%= user.id %>" name="name_<%= user.id %>" value="<%= user.name %>" required>
+            </div>
+            <div class="form-row">
+              <label for="income_<%= user.id %>">Ingreso mensual</label>
+              <input id="income_<%= user.id %>" name="income_<%= user.id %>" type="number" min="0" step="0.01" value="<%= user.income %>">
+            </div>
+          </div>
+        <% }) %>
+
+        <button class="button" type="submit">Guardar ingresos</button>
+      </form>
+    </section>
+
+    <section class="workspace workspace--single">
+      <form class="panel" action="/expenses" method="post">
+        <div class="panel__header">
+          <h2>Nuevo gasto a pagar</h2>
+        </div>
+
+        <div class="form-row">
+          <label for="description">Descripcion</label>
+          <input id="description" name="description" placeholder="Alquiler, comida, internet" required>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="amount">Importe</label>
+            <input id="amount" name="amount" type="number" min="0.01" step="0.01" required>
+          </div>
+          <div class="form-row">
+            <label for="expense_date">Fecha</label>
+            <input id="expense_date" name="expense_date" type="date" value="<%= today %>" required>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="category">Categoria</label>
+            <input id="category" name="category" placeholder="Hogar" value="General">
+          </div>
+          <div class="form-row">
+            <label for="paid_by">Responsable de pago</label>
+            <select id="paid_by" name="paid_by" required>
+              <% users.forEach((user) => { %>
+                <option value="<%= user.id %>"><%= user.name %></option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+
+        <fieldset class="segmented">
+          <legend>Tipo</legend>
+          <label>
+            <input type="radio" name="type" value="shared" checked>
+            <span>Compartido</span>
+          </label>
+          <label>
+            <input type="radio" name="type" value="individual">
+            <span>Individual</span>
+          </label>
+        </fieldset>
+
+        <div class="form-row is-hidden" data-owner-field>
+          <label for="owner_id">Titular</label>
+          <select id="owner_id" name="owner_id">
+            <% users.forEach((user) => { %>
+              <option value="<%= user.id %>"><%= user.name %></option>
+            <% }) %>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label for="notes">Notas</label>
+          <textarea id="notes" name="notes" rows="3"></textarea>
+        </div>
+
+        <button class="button" type="submit">Registrar a pagar</button>
+      </form>
+    </section>
+
+    <section class="settings-panel" id="cierres">
+      <button class="settings-toggle" type="button" data-closing-toggle aria-expanded="false">
+        <span>Balance / cierre mensual</span>
+        <strong>Ver</strong>
+      </button>
+
+      <div class="panel closing-panel is-hidden" data-closing-panel>
+        <form class="closing-form" action="/closings" method="post">
+          <div class="form-row">
+            <label for="period">Mes a cerrar</label>
+            <input id="period" name="period" type="month" value="<%= currentMonth %>" required>
+          </div>
+          <button class="button" type="submit">Cerrar mes</button>
+        </form>
+
+        <div class="table-wrap">
+          <table class="compact-table">
+            <thead>
+              <tr>
+                <th>Mes</th>
+                <th>Fecha de cierre</th>
+                <th>Reportes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (closings.length === 0) { %>
+                <tr>
+                  <td colspan="3" class="empty">Todavia no hay cierres guardados.</td>
+                </tr>
+              <% } %>
+              <% closings.forEach((closing) => { %>
+                <tr>
+                  <td><strong><%= closing.period %></strong></td>
+                  <td><%= closing.closed_at %></td>
+                  <td>
+                    <div class="row-actions row-actions--start">
+                      <a class="small-button" href="/closings/<%= closing.id %>/report.xls">Excel</a>
+                      <a class="small-button small-button--muted" href="/closings/<%= closing.id %>/report.pdf">PDF</a>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="history">
+      <div class="section-header">
+        <div>
+          <h2>Movimientos</h2>
+          <span><%= expenses.length %> cuentas</span>
+        </div>
+        <nav class="sort-tabs" aria-label="Ordenar movimientos">
+          <a class="<%= currentSort === 'date' ? 'is-active' : '' %>" href="/?sort=date">Fecha</a>
+          <a class="<%= currentSort === 'name' ? 'is-active' : '' %>" href="/?sort=name">Nombre</a>
+          <a class="<%= currentSort === 'category' ? 'is-active' : '' %>" href="/?sort=category">Categoria</a>
+        </nav>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th><a class="sort-link <%= currentSort === 'date' ? 'is-active' : '' %>" href="/?sort=date">Fecha</a></th>
+              <th><a class="sort-link <%= currentSort === 'name' ? 'is-active' : '' %>" href="/?sort=name">Descripcion</a></th>
+              <th><a class="sort-link <%= currentSort === 'category' ? 'is-active' : '' %>" href="/?sort=category">Categoria</a></th>
+              <th>Tipo</th>
+              <th>Estado</th>
+              <th>Responsable</th>
+              <th>Titular</th>
+              <th class="right">Importe</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (expenses.length === 0) { %>
+              <tr>
+                <td colspan="9" class="empty">Todavia no hay movimientos.</td>
+              </tr>
+            <% } %>
+            <% expenses.forEach((expense) => { %>
+              <tr>
+                <td><%= date(expense.expense_date) %></td>
+                <td>
+                  <strong><%= expense.description %></strong>
+                  <% if (expense.notes) { %>
+                    <small><%= expense.notes %></small>
+                  <% } %>
+                </td>
+                <td><%= expense.category %></td>
+                <td><span class="pill"><%= expense.type === 'shared' ? 'Compartido' : 'Individual' %></span></td>
+                <td>
+                  <span class="pill <%= expense.status === 'paid' ? 'pill--paid' : 'pill--pending' %>">
+                    <%= expense.status === 'paid' ? 'Pagado' : 'Pendiente' %>
+                  </span>
+                </td>
+                <td><%= expense.paid_by_name %></td>
+                <td><%= expense.owner_name || '-' %></td>
+                <td class="right"><%= money(expense.amount) %></td>
+                <td class="action-cell">
+                  <div class="row-actions">
+                    <% if (expense.status === 'paid') { %>
+                      <form action="/expenses/<%= expense.id %>/pending" method="post">
+                        <button class="small-button small-button--muted" type="submit">Marcar pendiente</button>
+                      </form>
+                    <% } else { %>
+                      <form action="/expenses/<%= expense.id %>/pay" method="post">
+                        <button class="small-button" type="submit">Marcar pagado</button>
+                      </form>
+                    <% } %>
+                    <button class="small-button small-button--muted" type="button" data-edit-toggle="<%= expense.id %>">Editar</button>
+                    <form action="/expenses/<%= expense.id %>/delete" method="post">
+                      <button class="icon-button" type="submit" aria-label="Eliminar gasto">&times;</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              <tr class="edit-row is-hidden" data-edit-row="<%= expense.id %>">
+                <td colspan="9">
+                  <form class="edit-form" action="/expenses/<%= expense.id %>/edit" method="post">
+                    <div class="edit-form__header">
+                      <h3>Editar gasto</h3>
+                      <button class="small-button small-button--muted" type="button" data-edit-toggle="<%= expense.id %>">Cerrar</button>
+                    </div>
+
+                    <div class="form-grid form-grid--thirds">
+                      <div class="form-row">
+                        <label for="edit_description_<%= expense.id %>">Descripcion</label>
+                        <input id="edit_description_<%= expense.id %>" name="description" value="<%= expense.description %>" required>
+                      </div>
+                      <div class="form-row">
+                        <label for="edit_amount_<%= expense.id %>">Importe</label>
+                        <input id="edit_amount_<%= expense.id %>" name="amount" type="number" min="0.01" step="0.01" value="<%= expense.amount %>" required>
+                      </div>
+                      <div class="form-row">
+                        <label for="edit_expense_date_<%= expense.id %>">Fecha</label>
+                        <input id="edit_expense_date_<%= expense.id %>" name="expense_date" type="date" value="<%= expense.expense_date %>" required>
+                      </div>
+                    </div>
+
+                    <div class="form-grid form-grid--thirds">
+                      <div class="form-row">
+                        <label for="edit_category_<%= expense.id %>">Categoria</label>
+                        <input id="edit_category_<%= expense.id %>" name="category" value="<%= expense.category %>">
+                      </div>
+                      <div class="form-row">
+                        <label for="edit_paid_by_<%= expense.id %>">Responsable de pago</label>
+                        <select id="edit_paid_by_<%= expense.id %>" name="paid_by" required>
+                          <% users.forEach((user) => { %>
+                            <option value="<%= user.id %>" <%= Number(expense.paid_by) === Number(user.id) ? 'selected' : '' %>><%= user.name %></option>
+                          <% }) %>
+                        </select>
+                      </div>
+                      <div class="form-row">
+                        <label for="edit_status_<%= expense.id %>">Estado</label>
+                        <select id="edit_status_<%= expense.id %>" name="status" required>
+                          <option value="pending" <%= expense.status === 'pending' ? 'selected' : '' %>>Pendiente</option>
+                          <option value="paid" <%= expense.status === 'paid' ? 'selected' : '' %>>Pagado</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <fieldset class="segmented">
+                      <legend>Tipo</legend>
+                      <label>
+                        <input type="radio" name="type" value="shared" <%= expense.type === 'shared' ? 'checked' : '' %>>
+                        <span>Compartido</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="type" value="individual" <%= expense.type === 'individual' ? 'checked' : '' %>>
+                        <span>Individual</span>
+                      </label>
+                    </fieldset>
+
+                    <div class="form-row" data-owner-field>
+                      <label for="edit_owner_id_<%= expense.id %>">Titular</label>
+                      <select id="edit_owner_id_<%= expense.id %>" name="owner_id">
+                        <% users.forEach((user) => { %>
+                          <option value="<%= user.id %>" <%= Number(expense.owner_id) === Number(user.id) ? 'selected' : '' %>><%= user.name %></option>
+                        <% }) %>
+                      </select>
+                    </div>
+
+                    <div class="form-row">
+                      <label for="edit_notes_<%= expense.id %>">Notas</label>
+                      <textarea id="edit_notes_<%= expense.id %>" name="notes" rows="2"><%= expense.notes || '' %></textarea>
+                    </div>
+
+                    <button class="button" type="submit">Guardar cambios</button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= person.name %> - Finanzas de pareja</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Detalle personal</p>
+      <h1><%= person.name %></h1>
+    </div>
+    <div class="topbar__total">
+      <span><%= person.balance >= 0 ? 'A favor' : 'Debe compensar' %></span>
+      <strong><%= money(Math.abs(person.balance)) %></strong>
+    </div>
+  </header>
+
+  <main class="shell">
+    <a class="back-link" href="/">Volver al tablero</a>
+
+    <section class="summary-grid" aria-label="Resumen de persona">
+      <article class="metric">
+        <span>Ingreso mensual</span>
+        <strong><%= money(person.income) %></strong>
+      </article>
+      <article class="metric">
+        <span>Participacion</span>
+        <strong><%= percent(person.share) %></strong>
+      </article>
+      <article class="metric">
+        <span>Total que debe pagar</span>
+        <strong><%= money(person.sharedPendingToPay + person.individualPending) %></strong>
+      </article>
+      <article class="metric">
+        <span>Individual pendiente</span>
+        <strong><%= money(person.individualPending) %></strong>
+      </article>
+    </section>
+
+    <section class="detail-grid">
+      <article class="panel">
+        <div class="panel__header">
+          <h2>Gastos compartidos</h2>
+        </div>
+        <dl class="detail-list">
+          <div>
+            <dt>Le corresponde</dt>
+            <dd><%= money(person.sharedOwed) %></dd>
+          </div>
+          <div>
+            <dt>Asignado a pagar</dt>
+            <dd><%= money(person.sharedAssigned) %></dd>
+          </div>
+          <div>
+            <dt>Ya pagado</dt>
+            <dd><%= money(person.sharedPaid) %></dd>
+          </div>
+          <div>
+            <dt>Falta pagar como responsable</dt>
+            <dd><%= money(person.sharedPendingToPay) %></dd>
+          </div>
+        </dl>
+      </article>
+
+      <article class="panel">
+        <div class="panel__header">
+          <h2>Lectura rapida</h2>
+        </div>
+        <dl class="detail-list">
+          <div>
+            <dt>Gastos compartidos donde participa</dt>
+            <dd><%= detail.sharedCount %></dd>
+          </div>
+          <div>
+            <dt>Compartidos bajo su responsabilidad</dt>
+            <dd><%= detail.assignedSharedCount %></dd>
+          </div>
+          <div>
+            <dt>Gastos individuales propios</dt>
+            <dd><%= detail.individualCount %></dd>
+          </div>
+          <div>
+            <dt><%= person.pendingBalance >= 0 ? 'A recuperar si paga pendientes' : 'Debe aportar si paga la otra persona' %></dt>
+            <dd><%= money(Math.abs(person.pendingBalance)) %></dd>
+          </div>
+        </dl>
+      </article>
+    </section>
+
+    <section class="history">
+      <div class="section-header">
+        <div>
+          <h2>Por categoria</h2>
+          <span>Importes segun la parte de <%= person.name %></span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="compact-table">
+          <thead>
+            <tr>
+              <th>Categoria</th>
+              <th class="right">Pendiente</th>
+              <th class="right">Pagado</th>
+              <th class="right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (detail.categories.length === 0) { %>
+              <tr>
+                <td colspan="4" class="empty">Todavia no hay datos para esta persona.</td>
+              </tr>
+            <% } %>
+            <% detail.categories.forEach((category) => { %>
+              <tr>
+                <td><strong><%= category.category %></strong></td>
+                <td class="right"><%= money(category.pending) %></td>
+                <td class="right"><%= money(category.paid) %></td>
+                <td class="right"><%= money(category.total) %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="history">
+      <div class="section-header">
+        <div>
+          <h2>Movimientos de <%= person.name %></h2>
+          <span><%= detail.responsibleExpenses.length %> registros bajo su responsabilidad</span>
+        </div>
+        <button
+          class="small-button"
+          type="button"
+          data-copy-user-movements
+          <%= detail.responsibleExpenses.length === 0 ? 'disabled' : '' %>
+        >
+          Copiar para WhatsApp
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Descripcion</th>
+              <th>Categoria</th>
+              <th>Tipo</th>
+              <th>Estado</th>
+              <th class="right">Total</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (detail.responsibleExpenses.length === 0) { %>
+              <tr>
+                <td colspan="6" class="empty">Todavia no hay movimientos bajo su responsabilidad.</td>
+              </tr>
+            <% } %>
+            <% detail.responsibleExpenses.forEach((expense) => { %>
+              <tr
+                data-user-movement
+                data-category="<%= expense.category %>"
+                data-description="<%= expense.description %>"
+                data-type="<%= expense.type === 'shared' ? 'Compartido' : 'Individual' %>"
+                data-total="<%= money(expense.amount) %>"
+              >
+                <td>
+                  <strong><%= expense.description %></strong>
+                  <% if (expense.notes) { %>
+                    <small><%= expense.notes %></small>
+                  <% } %>
+                </td>
+                <td><%= expense.category %></td>
+                <td>
+                  <span class="pill <%= expense.type === 'shared' ? 'pill--shared' : 'pill--individual' %>">
+                    <%= expense.type === 'shared' ? 'Compartido' : 'Individual' %>
+                  </span>
+                </td>
+                <td>
+                  <span class="pill <%= expense.status === 'paid' ? 'pill--paid' : 'pill--pending' %>">
+                    <%= expense.status === 'paid' ? 'Pagado' : 'Pendiente' %>
+                  </span>
+                </td>
+                <td class="right"><%= money(expense.amount) %></td>
+                <td class="action-cell">
+                  <div class="row-actions">
+                    <% if (expense.status === 'paid') { %>
+                      <form action="/expenses/<%= expense.id %>/pending" method="post">
+                        <input type="hidden" name="redirect_to" value="/personas/<%= person.id %>">
+                        <button class="small-button small-button--muted" type="submit">Marcar pendiente</button>
+                      </form>
+                    <% } else { %>
+                      <form action="/expenses/<%= expense.id %>/pay" method="post">
+                        <input type="hidden" name="redirect_to" value="/personas/<%= person.id %>">
+                        <button class="small-button" type="submit">Marcar pagado</button>
+                      </form>
+                    <% } %>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/js/app.js"></script>
+</body>
+</html>
