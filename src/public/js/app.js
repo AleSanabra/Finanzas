@@ -1,4 +1,5 @@
 const typeInputs = document.querySelectorAll('input[name="type"]');
+const durationInputs = document.querySelectorAll('input[name="duration_type"]');
 const editToggles = document.querySelectorAll('[data-edit-toggle]');
 const settingsToggle = document.querySelector('[data-settings-toggle]');
 const settingsPanel = document.querySelector('[data-settings-panel]');
@@ -36,14 +37,38 @@ function syncOwnerField(form) {
   ownerField.classList.toggle('is-hidden', !isIndividual);
 }
 
+function syncInstallmentsField(form) {
+  const installmentsField = form.querySelector('[data-installments-field]');
+  const installmentsInput = form.querySelector('input[name="installments_total"]');
+  const selected = form.querySelector('input[name="duration_type"]:checked');
+  const isInstallment = selected && selected.value === 'installment';
+
+  if (!installmentsField) {
+    return;
+  }
+
+  installmentsField.classList.toggle('is-hidden', !isInstallment);
+
+  if (installmentsInput) {
+    installmentsInput.required = isInstallment;
+  }
+}
+
 typeInputs.forEach((input) => {
   const form = input.closest('form');
 
   input.addEventListener('change', () => syncOwnerField(form));
 });
 
+durationInputs.forEach((input) => {
+  const form = input.closest('form');
+
+  input.addEventListener('change', () => syncInstallmentsField(form));
+});
+
 document.querySelectorAll('form').forEach((form) => {
   syncOwnerField(form);
+  syncInstallmentsField(form);
 });
 
 editToggles.forEach((button) => {

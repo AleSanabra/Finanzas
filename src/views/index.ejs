@@ -19,6 +19,8 @@
   </header>
 
   <main class="shell">
+    <a class="back-link" href="/historial">Ver historial de meses anteriores</a>
+
     <section class="summary-grid" aria-label="Resumen">
       <article class="metric">
         <span>Pendiente</span>
@@ -191,6 +193,27 @@
           </label>
         </fieldset>
 
+        <fieldset class="segmented segmented--thirds">
+          <legend>Duracion</legend>
+          <label>
+            <input type="radio" name="duration_type" value="occasional">
+            <span>Ocasional</span>
+          </label>
+          <label>
+            <input type="radio" name="duration_type" value="persistent" checked>
+            <span>Persistente</span>
+          </label>
+          <label>
+            <input type="radio" name="duration_type" value="installment">
+            <span>Cuota</span>
+          </label>
+        </fieldset>
+
+        <div class="form-row is-hidden" data-installments-field>
+          <label for="installments_total">Cantidad de cuotas</label>
+          <input id="installments_total" name="installments_total" type="number" min="1" step="1" value="1">
+        </div>
+
         <div class="form-row is-hidden" data-owner-field>
           <label for="owner_id">Titular</label>
           <select id="owner_id" name="owner_id">
@@ -264,9 +287,9 @@
           <span><%= expenses.length %> cuentas</span>
         </div>
         <nav class="sort-tabs" aria-label="Ordenar movimientos">
-          <a class="<%= currentSort === 'date' ? 'is-active' : '' %>" href="/?sort=date">Fecha</a>
           <a class="<%= currentSort === 'name' ? 'is-active' : '' %>" href="/?sort=name">Nombre</a>
           <a class="<%= currentSort === 'category' ? 'is-active' : '' %>" href="/?sort=category">Categoria</a>
+          <a class="<%= currentSort === 'responsible' ? 'is-active' : '' %>" href="/?sort=responsible">Responsable</a>
         </nav>
       </div>
 
@@ -274,7 +297,6 @@
         <table>
           <thead>
             <tr>
-              <th><a class="sort-link <%= currentSort === 'date' ? 'is-active' : '' %>" href="/?sort=date">Fecha</a></th>
               <th><a class="sort-link <%= currentSort === 'name' ? 'is-active' : '' %>" href="/?sort=name">Descripcion</a></th>
               <th><a class="sort-link <%= currentSort === 'category' ? 'is-active' : '' %>" href="/?sort=category">Categoria</a></th>
               <th>Tipo</th>
@@ -288,14 +310,16 @@
           <tbody>
             <% if (expenses.length === 0) { %>
               <tr>
-                <td colspan="9" class="empty">Todavia no hay movimientos.</td>
+                <td colspan="8" class="empty">Todavia no hay movimientos.</td>
               </tr>
             <% } %>
             <% expenses.forEach((expense) => { %>
               <tr>
-                <td><%= date(expense.expense_date) %></td>
                 <td>
                   <strong><%= expense.description %></strong>
+                  <% if (expense.duration_type === 'installment') { %>
+                    <small>Cuota <%= expense.installment_number %>/<%= expense.installments_total %></small>
+                  <% } %>
                   <% if (expense.notes) { %>
                     <small><%= expense.notes %></small>
                   <% } %>
@@ -322,14 +346,14 @@
                       </form>
                     <% } %>
                     <button class="small-button small-button--muted" type="button" data-edit-toggle="<%= expense.id %>">Editar</button>
-                    <form action="/expenses/<%= expense.id %>/delete" method="post">
-                      <button class="icon-button" type="submit" aria-label="Eliminar gasto">&times;</button>
+                    <form action="/expenses/<%= expense.id %>/deactivate" method="post">
+                      <button class="small-button small-button--muted" type="submit">Desactivar</button>
                     </form>
                   </div>
                 </td>
               </tr>
               <tr class="edit-row is-hidden" data-edit-row="<%= expense.id %>">
-                <td colspan="9">
+                <td colspan="8">
                   <form class="edit-form" action="/expenses/<%= expense.id %>/edit" method="post">
                     <div class="edit-form__header">
                       <h3>Editar gasto</h3>
@@ -400,6 +424,9 @@
                     </div>
 
                     <button class="button" type="submit">Guardar cambios</button>
+                  </form>
+                  <form class="edit-form edit-form--danger" action="/expenses/<%= expense.id %>/delete" method="post">
+                    <button class="button button--danger" type="submit">Eliminar gasto definitivamente</button>
                   </form>
                 </td>
               </tr>

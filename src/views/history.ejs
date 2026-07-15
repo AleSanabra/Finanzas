@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Historial mensual - Finanzas de pareja</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Historial mensual</p>
+      <h1><%= selectedPeriod || 'Meses anteriores' %></h1>
+    </div>
+    <div class="topbar__total">
+      <span>Total del mes</span>
+      <strong><%= money(dashboard.totals.all) %></strong>
+    </div>
+  </header>
+
+  <main class="shell">
+    <a class="back-link" href="/">Volver al tablero</a>
+
+    <section class="history">
+      <div class="section-header">
+        <div>
+          <h2>Meses anteriores</h2>
+          <span><%= periods.length %> meses con movimientos</span>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="compact-table">
+          <thead>
+            <tr>
+              <th>Mes</th>
+              <th class="right">Movimientos</th>
+              <th class="right">Total</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (periods.length === 0) { %>
+              <tr>
+                <td colspan="4" class="empty">Todavia no hay meses anteriores para mostrar.</td>
+              </tr>
+            <% } %>
+            <% periods.forEach((month) => { %>
+              <tr>
+                <td><strong><%= month.period %></strong></td>
+                <td class="right"><%= month.total_expenses %></td>
+                <td class="right"><%= money(month.total_amount) %></td>
+                <td>
+                  <a class="small-button <%= month.period === selectedPeriod ? 'small-button--muted' : '' %>" href="/historial/<%= month.period %>">
+                    Ver mes
+                  </a>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <% if (selectedPeriod) { %>
+      <section class="summary-grid" aria-label="Resumen del mes">
+        <article class="metric">
+          <span>Pendiente</span>
+          <strong><%= money(dashboard.totals.pending) %></strong>
+        </article>
+        <article class="metric">
+          <span>Pagado</span>
+          <strong><%= money(dashboard.totals.paid) %></strong>
+        </article>
+        <article class="metric">
+          <span>Compartidos</span>
+          <strong><%= money(dashboard.totals.shared) %></strong>
+        </article>
+        <article class="metric">
+          <span>Individuales</span>
+          <strong><%= money(dashboard.totals.individual) %></strong>
+        </article>
+      </section>
+
+      <section class="history">
+        <div class="section-header">
+          <div>
+            <h2>Movimientos de <%= selectedPeriod %></h2>
+            <span><%= expenses.length %> registros del mes</span>
+          </div>
+          <% if (closing) { %>
+            <div class="row-actions">
+              <a class="small-button" href="/closings/<%= closing.id %>/report.xls">Excel</a>
+              <a class="small-button small-button--muted" href="/closings/<%= closing.id %>/report.pdf">PDF</a>
+            </div>
+          <% } %>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Descripcion</th>
+                <th>Categoria</th>
+                <th>Tipo</th>
+                <th>Estado</th>
+                <th>Responsable</th>
+                <th>Titular</th>
+                <th>Duracion</th>
+                <th class="right">Importe</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (expenses.length === 0) { %>
+                <tr>
+                  <td colspan="8" class="empty">No hay movimientos para este mes.</td>
+                </tr>
+              <% } %>
+              <% expenses.forEach((expense) => { %>
+                <tr>
+                  <td>
+                    <strong><%= expense.description %></strong>
+                    <% if (expense.notes) { %>
+                      <small><%= expense.notes %></small>
+                    <% } %>
+                  </td>
+                  <td><%= expense.category %></td>
+                  <td><span class="pill"><%= expense.type === 'shared' ? 'Compartido' : 'Individual' %></span></td>
+                  <td>
+                    <span class="pill <%= expense.status === 'paid' ? 'pill--paid' : 'pill--pending' %>">
+                      <%= expense.status === 'paid' ? 'Pagado' : 'Pendiente' %>
+                    </span>
+                  </td>
+                  <td><%= expense.paid_by_name %></td>
+                  <td><%= expense.owner_name || '-' %></td>
+                  <td>
+                    <% if (expense.duration_type === 'installment') { %>
+                      Cuota <%= expense.installment_number %>/<%= expense.installments_total %>
+                    <% } else if (expense.duration_type === 'occasional') { %>
+                      Ocasional
+                    <% } else { %>
+                      Persistente
+                    <% } %>
+                  </td>
+                  <td class="right"><%= money(expense.amount) %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    <% } %>
+  </main>
+</body>
+</html>

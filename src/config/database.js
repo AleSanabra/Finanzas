@@ -71,6 +71,13 @@ async function initDb() {
       paid_by INTEGER NOT NULL,
       owner_id INTEGER,
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid')),
+      is_active INTEGER NOT NULL DEFAULT 1,
+      active_from_period TEXT,
+      inactive_from_period TEXT,
+      duration_type TEXT NOT NULL DEFAULT 'persistent',
+      series_id INTEGER,
+      installment_number INTEGER,
+      installments_total INTEGER,
       paid_at TEXT,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -97,6 +104,36 @@ async function initDb() {
 
   if (!columnNames.includes('paid_at')) {
     await run('ALTER TABLE expenses ADD COLUMN paid_at TEXT');
+  }
+
+  if (!columnNames.includes('is_active')) {
+    await run('ALTER TABLE expenses ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1');
+  }
+
+  if (!columnNames.includes('active_from_period')) {
+    await run('ALTER TABLE expenses ADD COLUMN active_from_period TEXT');
+  }
+
+  await run("UPDATE expenses SET active_from_period = substr(expense_date, 1, 7) WHERE active_from_period IS NULL");
+
+  if (!columnNames.includes('inactive_from_period')) {
+    await run('ALTER TABLE expenses ADD COLUMN inactive_from_period TEXT');
+  }
+
+  if (!columnNames.includes('duration_type')) {
+    await run("ALTER TABLE expenses ADD COLUMN duration_type TEXT NOT NULL DEFAULT 'persistent'");
+  }
+
+  if (!columnNames.includes('series_id')) {
+    await run('ALTER TABLE expenses ADD COLUMN series_id INTEGER');
+  }
+
+  if (!columnNames.includes('installment_number')) {
+    await run('ALTER TABLE expenses ADD COLUMN installment_number INTEGER');
+  }
+
+  if (!columnNames.includes('installments_total')) {
+    await run('ALTER TABLE expenses ADD COLUMN installments_total INTEGER');
   }
 
   const row = await get('SELECT COUNT(*) AS total FROM users');

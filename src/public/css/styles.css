@@ -427,6 +427,10 @@ textarea:focus {
   padding: 0;
 }
 
+.segmented--thirds {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .segmented legend {
   grid-column: 1 / -1;
 }
@@ -482,6 +486,14 @@ textarea:focus {
 
 .button:hover {
   background: var(--brand-dark);
+}
+
+.button--danger {
+  background: var(--negative);
+}
+
+.button--danger:hover {
+  background: #7f1d1d;
 }
 
 .panel .button {
@@ -694,6 +706,11 @@ td strong {
   padding: 18px;
 }
 
+.edit-form--danger {
+  background: #fff7f7;
+  padding-top: 0;
+}
+
 .edit-form__header {
   align-items: center;
   display: flex;
@@ -739,6 +756,7 @@ td strong {
   .workspace,
   .detail-grid,
   .closing-form,
+  .segmented--thirds,
   .form-grid--thirds {
     grid-template-columns: 1fr;
   }

@@ -29,6 +29,16 @@ function expenseStatus(expense) {
   return expense.status === 'paid' ? 'Pagado' : 'Pendiente';
 }
 
+function activeStatus(expense) {
+  return Number(expense.is_active) === 0 ? 'Inactivo' : 'Activo';
+}
+
+function expenseInstallment(expense) {
+  return expense.duration_type === 'installment'
+    ? `Cuota ${expense.installment_number}/${expense.installments_total}`
+    : '';
+}
+
 function generateExcelReport(snapshot) {
   const balances = snapshot.dashboard.balances || [];
   const expenses = snapshot.expenses || [];
@@ -85,16 +95,19 @@ function generateExcelReport(snapshot) {
       <h2>Movimientos</h2>
       <table>
         <tr>
-          <th>Fecha</th><th>Descripcion</th><th>Categoria</th><th>Tipo</th><th>Estado</th>
+          <th>Fecha</th><th>Desde mes</th><th>Descripcion</th><th>Categoria</th><th>Tipo</th><th>Cuota</th><th>Estado</th><th>Vigencia</th>
           <th>Responsable</th><th>Titular</th><th>Importe</th><th>Notas</th>
         </tr>
         ${expenses.map((expense) => `
           <tr>
             <td>${escapeHtml(expense.expense_date)}</td>
+            <td>${escapeHtml(expense.active_from_period || String(expense.expense_date || '').slice(0, 7))}</td>
             <td>${escapeHtml(expense.description)}</td>
             <td>${escapeHtml(expense.category)}</td>
             <td>${expenseType(expense)}</td>
+            <td>${escapeHtml(expenseInstallment(expense))}</td>
             <td>${expenseStatus(expense)}</td>
+            <td>${escapeHtml(expense.inactive_from_period ? `${activeStatus(expense)} desde ${expense.inactive_from_period}` : activeStatus(expense))}</td>
             <td>${escapeHtml(expense.paid_by_name)}</td>
             <td>${escapeHtml(expense.owner_name || '')}</td>
             <td class="right">${formatMoney(expense.amount)}</td>
@@ -138,7 +151,10 @@ function buildPdfLines(snapshot) {
   lines.push('', 'Movimientos');
 
   snapshot.expenses.forEach((expense) => {
-    lines.push(`${expense.expense_date} | ${expense.description} | ${expense.category} | ${expenseType(expense)} | ${expenseStatus(expense)} | ${formatMoney(expense.amount)}`);
+    const fromPeriod = expense.active_from_period || String(expense.expense_date || '').slice(0, 7);
+    const activeLabel = expense.inactive_from_period ? `inactivo desde ${expense.inactive_from_period}` : activeStatus(expense).toLowerCase();
+    const installmentLabel = expenseInstallment(expense);
+    lines.push(`${fromPeriod} | ${expense.description} | ${expense.category} | ${expenseType(expense)}${installmentLabel ? ` | ${installmentLabel}` : ''} | ${expenseStatus(expense)} | ${activeLabel} | ${formatMoney(expense.amount)}`);
   });
 
   return lines;

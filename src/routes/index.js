@@ -24,17 +24,49 @@ async function getUsers() {
   return all('SELECT * FROM users ORDER BY id ASC LIMIT 2');
 }
 
+function currentPeriod() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function addMonthsToPeriod(period, months) {
+  const [year, month] = period.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + months, 1));
+
+  return date.toISOString().slice(0, 7);
+}
+
+function dateForPeriod(originalDate, period) {
+  const day = Number(String(originalDate || '').slice(8, 10)) || 1;
+  const [year, month] = period.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  return `${period}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+}
+
+function expenseDuration(value) {
+  return ['occasional', 'persistent', 'installment'].includes(value) ? value : 'persistent';
+}
+
+function asInstallments(value) {
+  const installments = Number.parseInt(value, 10);
+
+  return Number.isFinite(installments) && installments > 0 ? installments : 1;
+}
+
 function getExpenseOrder(sort) {
   const orders = {
     category: 'expenses.category COLLATE NOCASE ASC, expenses.expense_date DESC, expenses.id DESC',
     date: 'expenses.expense_date DESC, expenses.id DESC',
     name: 'expenses.description COLLATE NOCASE ASC, expenses.expense_date DESC, expenses.id DESC',
+    responsible: 'payer.name COLLATE NOCASE ASC, expenses.description COLLATE NOCASE ASC, expenses.expense_date DESC, expenses.id DESC',
   };
 
-  return orders[sort] || orders.date;
+  return orders[sort] || orders.name;
 }
 
-async function getExpenses(sort = 'date') {
+async function getExpenses(sort = 'name', period = currentPeriod()) {
+  await ensurePersistentExpenses(period);
+
   return all(`
     SELECT
       expenses.*,
@@ -43,8 +75,89 @@ async function getExpenses(sort = 'date') {
     FROM expenses
     JOIN users AS payer ON payer.id = expenses.paid_by
     LEFT JOIN users AS owner ON owner.id = expenses.owner_id
+    WHERE expenses.is_active = 1
+      AND substr(expenses.expense_date, 1, 7) = ?
     ORDER BY ${getExpenseOrder(sort)}
-  `);
+  `, [period]);
+}
+
+async function ensurePersistentExpenses(period) {
+  await run(
+    `
+      UPDATE expenses
+      SET
+        is_active = 0,
+        inactive_from_period = ?
+      WHERE is_active = 1
+        AND duration_type IN ('occasional', 'installment')
+        AND substr(expense_date, 1, 7) < ?
+    `,
+    [period, period],
+  );
+
+  const persistentExpenses = await all(`
+    SELECT
+      expenses.*
+    FROM expenses
+    WHERE expenses.is_active = 1
+      AND expenses.duration_type = 'persistent'
+      AND substr(expenses.expense_date, 1, 7) < ?
+  `, [period]);
+
+  await Promise.all(persistentExpenses.map(async (expense) => {
+    const seriesId = expense.series_id || expense.id;
+    const expensePeriod = String(expense.expense_date || '').slice(0, 7);
+    let nextPeriod = addMonthsToPeriod(expensePeriod, 1);
+
+    while (nextPeriod <= period) {
+      const existing = await get(`
+        SELECT id
+        FROM expenses
+        WHERE COALESCE(series_id, id) = ?
+          AND substr(expense_date, 1, 7) = ?
+        LIMIT 1
+      `, [seriesId, nextPeriod]);
+
+      if (!existing) {
+        const isCurrentPeriod = nextPeriod === period;
+
+        await run(
+          `
+            INSERT INTO expenses
+              (description, amount, category, expense_date, active_from_period, inactive_from_period, type, paid_by, owner_id, status, is_active, duration_type, series_id, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 'persistent', ?, ?)
+          `,
+          [
+            expense.description,
+            expense.amount,
+            expense.category,
+            dateForPeriod(expense.expense_date, nextPeriod),
+            nextPeriod,
+            isCurrentPeriod ? null : addMonthsToPeriod(nextPeriod, 1),
+            expense.type,
+            expense.paid_by,
+            expense.owner_id,
+            isCurrentPeriod ? 1 : 0,
+            seriesId,
+            expense.notes,
+          ],
+        );
+      }
+
+      nextPeriod = addMonthsToPeriod(nextPeriod, 1);
+    }
+
+    await run(
+      `
+        UPDATE expenses
+        SET
+          is_active = 0,
+          inactive_from_period = ?
+        WHERE id = ?
+      `,
+      [addMonthsToPeriod(expensePeriod, 1), expense.id],
+    );
+  }));
 }
 
 async function getExpensesByPeriod(period) {
@@ -63,6 +176,19 @@ async function getExpensesByPeriod(period) {
 
 async function getClosings() {
   return all('SELECT id, period, closed_at FROM monthly_closings ORDER BY period DESC');
+}
+
+async function getHistoryPeriods() {
+  return all(`
+    SELECT
+      substr(expense_date, 1, 7) AS period,
+      COUNT(*) AS total_expenses,
+      SUM(amount) AS total_amount
+    FROM expenses
+    WHERE substr(expense_date, 1, 7) < ?
+    GROUP BY period
+    ORDER BY period DESC
+  `, [currentPeriod()]);
 }
 
 function parseClosing(row) {
@@ -148,7 +274,7 @@ function getPersonDetail(person, expenses) {
 router.get('/', async (req, res, next) => {
   try {
     const users = await getUsers();
-    const currentSort = ['name', 'date', 'category'].includes(req.query.sort) ? req.query.sort : 'date';
+    const currentSort = ['name', 'category', 'responsible'].includes(req.query.sort) ? req.query.sort : 'name';
     const expenses = await getExpenses(currentSort);
     const dashboard = calculateDashboard(users, expenses);
     const closings = await getClosings();
@@ -158,7 +284,7 @@ router.get('/', async (req, res, next) => {
       currentSort,
       dashboard,
       expenses,
-      currentMonth: new Date().toISOString().slice(0, 7),
+      currentMonth: currentPeriod(),
       today: new Date().toISOString().slice(0, 10),
       users,
     });
@@ -166,6 +292,35 @@ router.get('/', async (req, res, next) => {
     next(err);
   }
 });
+
+async function renderHistory(req, res, next) {
+  try {
+    await ensurePersistentExpenses(currentPeriod());
+
+    const users = await getUsers();
+    const periods = await getHistoryPeriods();
+    const requestedPeriod = /^\d{4}-\d{2}$/.test(req.params.period || '') ? req.params.period : null;
+    const selectedPeriod = requestedPeriod || (periods[0] && periods[0].period);
+    const expenses = selectedPeriod ? await getExpensesByPeriod(selectedPeriod) : [];
+    const dashboard = calculateDashboard(users, expenses);
+    const closing = selectedPeriod
+      ? await get('SELECT id, period, closed_at FROM monthly_closings WHERE period = ?', [selectedPeriod])
+      : null;
+
+    res.render('history', {
+      closing,
+      dashboard,
+      expenses,
+      periods,
+      selectedPeriod,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+router.get('/historial', renderHistory);
+router.get('/historial/:period', renderHistory);
 
 router.get('/personas/:id', async (req, res, next) => {
   try {
@@ -293,24 +448,78 @@ router.post('/expenses', async (req, res, next) => {
   try {
     const type = req.body.type === 'individual' ? 'individual' : 'shared';
     const ownerId = type === 'individual' ? Number(req.body.owner_id) : null;
+    const expenseDate = req.body.expense_date || new Date().toISOString().slice(0, 10);
+    const durationType = expenseDuration(req.body.duration_type);
+    const startPeriod = expenseDate.slice(0, 7);
+    const installmentsTotal = durationType === 'installment' ? asInstallments(req.body.installments_total) : null;
+    const baseExpense = [
+      (req.body.description || '').trim(),
+      asAmount(req.body.amount),
+      (req.body.category || 'General').trim() || 'General',
+      type,
+      Number(req.body.paid_by),
+      ownerId,
+      (req.body.notes || '').trim(),
+    ];
 
-    await run(
+    if (durationType === 'installment') {
+      let seriesId = null;
+
+      for (let index = 0; index < installmentsTotal; index += 1) {
+        const period = addMonthsToPeriod(startPeriod, index);
+        const result = await run(
+          `
+            INSERT INTO expenses
+              (description, amount, category, expense_date, active_from_period, type, paid_by, owner_id, status, is_active, duration_type, series_id, installment_number, installments_total, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, 'installment', ?, ?, ?, ?)
+          `,
+          [
+            baseExpense[0],
+            baseExpense[1],
+            baseExpense[2],
+            dateForPeriod(expenseDate, period),
+            period,
+            baseExpense[3],
+            baseExpense[4],
+            baseExpense[5],
+            seriesId,
+            index + 1,
+            installmentsTotal,
+            baseExpense[6],
+          ],
+        );
+
+        if (!seriesId) {
+          seriesId = result.id;
+          await run('UPDATE expenses SET series_id = ? WHERE id = ?', [seriesId, result.id]);
+        }
+      }
+
+      res.redirect('/');
+      return;
+    }
+
+    const result = await run(
       `
         INSERT INTO expenses
-          (description, amount, category, expense_date, type, paid_by, owner_id, status, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+          (description, amount, category, expense_date, active_from_period, type, paid_by, owner_id, status, is_active, duration_type, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?)
       `,
       [
-        (req.body.description || '').trim(),
-        asAmount(req.body.amount),
-        (req.body.category || 'General').trim() || 'General',
-        req.body.expense_date || new Date().toISOString().slice(0, 10),
-        type,
-        Number(req.body.paid_by),
-        ownerId,
-        (req.body.notes || '').trim(),
+        baseExpense[0],
+        baseExpense[1],
+        baseExpense[2],
+        expenseDate,
+        startPeriod,
+        baseExpense[3],
+        baseExpense[4],
+        baseExpense[5],
+        durationType,
+        baseExpense[6],
       ],
     );
+
+    await run('UPDATE expenses SET series_id = ? WHERE id = ?', [result.id, result.id]);
 
     res.redirect('/');
   } catch (err) {
@@ -335,6 +544,7 @@ router.post('/expenses/:id/edit', async (req, res, next) => {
     const type = req.body.type === 'individual' ? 'individual' : 'shared';
     const ownerId = type === 'individual' ? Number(req.body.owner_id) : null;
     const status = req.body.status === 'paid' ? 'paid' : 'pending';
+    const expenseDate = req.body.expense_date || new Date().toISOString().slice(0, 10);
 
     await run(
       `
@@ -344,6 +554,7 @@ router.post('/expenses/:id/edit', async (req, res, next) => {
           amount = ?,
           category = ?,
           expense_date = ?,
+          active_from_period = ?,
           type = ?,
           paid_by = ?,
           owner_id = ?,
@@ -356,7 +567,8 @@ router.post('/expenses/:id/edit', async (req, res, next) => {
         (req.body.description || '').trim(),
         asAmount(req.body.amount),
         (req.body.category || 'General').trim() || 'General',
-        req.body.expense_date || new Date().toISOString().slice(0, 10),
+        expenseDate,
+        expenseDate.slice(0, 7),
         type,
         Number(req.body.paid_by),
         ownerId,
@@ -368,6 +580,24 @@ router.post('/expenses/:id/edit', async (req, res, next) => {
     );
 
     res.redirect('/');
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/expenses/:id/deactivate', async (req, res, next) => {
+  try {
+    await run(
+      `
+        UPDATE expenses
+        SET
+          is_active = 0,
+          inactive_from_period = ?
+        WHERE id = ?
+      `,
+      [currentPeriod(), req.params.id],
+    );
+    redirectAfterAction(req, res);
   } catch (err) {
     next(err);
   }
